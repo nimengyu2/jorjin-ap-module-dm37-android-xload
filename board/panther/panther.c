@@ -43,13 +43,6 @@
 #define CORE_DPLL_PARAM_M	0x360
 #define CORE_DPLL_PARAM_N	0xC
 
-/* BeagleBoard revisions */
-#define REVISION_AXBX		0x7
-#define REVISION_CX		0x6
-#define REVISION_C4		0x5
-#define REVISION_XM		0x0
-#define REVISION_XMC		0x2
-
 /* Used to index into DPLL parameter tables */
 struct dpll_param {
 	unsigned int m;
@@ -247,38 +240,6 @@ u32 cpu_is_3410(void)
 	}
 }
 
-/******************************************
- * beagle_identify
- * Description: Detect if we are running on a Beagle revision Ax/Bx,
- *		C1/2/3, C4 or D. This can be done by reading
- *		the level of GPIO173, GPIO172 and GPIO171. This should
- *		result in
- *		GPIO173, GPIO172, GPIO171: 1 1 1 => Ax/Bx
- *		GPIO173, GPIO172, GPIO171: 1 1 0 => C1/2/3
- *		GPIO173, GPIO172, GPIO171: 1 0 1 => C4
- *		GPIO173, GPIO172, GPIO171: 0 0 0 => XM
- ******************************************/
-int beagle_revision(void)
-{
-	int rev;
-
-	omap_request_gpio(171);
-	omap_request_gpio(172);
-	omap_request_gpio(173);
-	omap_set_gpio_direction(171, 1);
-	omap_set_gpio_direction(172, 1);
-	omap_set_gpio_direction(173, 1);
-
-	rev = omap_get_gpio_datain(173) << 2 |
-		omap_get_gpio_datain(172) << 1 |
-		omap_get_gpio_datain(171);
-	omap_free_gpio(171);
-	omap_free_gpio(172);
-	omap_free_gpio(173);
-
-	return rev;
-}
-
 /*****************************************************************
  * sr32 - clear & set a value in a bit range for a 32 bit address
  *****************************************************************/
@@ -323,27 +284,15 @@ void config_3430sdram_ddr(void)
 	/* setup sdrc to ball mux */
 	__raw_writel(SDP_SDRC_SHARING, SDRC_SHARING);
 
-	if ((beagle_revision() == REVISION_XM) || (beagle_revision() == REVISION_XMC)) {
-		__raw_writel(0x2, SDRC_CS_CFG); /* 256MB/bank */
-		__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_0);
-		__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_1);
-		__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_0);
-		__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_0);
-		__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_1);
-		__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_1);
-		__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_0);
-		__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
-	} else {
-		__raw_writel(0x1, SDRC_CS_CFG); /* 128MB/bank */
-		__raw_writel(SDP_SDRC_MDCFG_0_DDR, SDRC_MCFG_0);
-		__raw_writel(SDP_SDRC_MDCFG_0_DDR, SDRC_MCFG_1);
-		__raw_writel(MICRON_V_ACTIMA_165, SDRC_ACTIM_CTRLA_0);
-		__raw_writel(MICRON_V_ACTIMB_165, SDRC_ACTIM_CTRLB_0);
-		__raw_writel(MICRON_V_ACTIMA_165, SDRC_ACTIM_CTRLA_1);
-		__raw_writel(MICRON_V_ACTIMB_165, SDRC_ACTIM_CTRLB_1);
-		__raw_writel(SDP_3430_SDRC_RFR_CTRL_165MHz, SDRC_RFR_CTRL_0);
-		__raw_writel(SDP_3430_SDRC_RFR_CTRL_165MHz, SDRC_RFR_CTRL_1);
-	}
+	__raw_writel(0x2, SDRC_CS_CFG); /* 256MB/bank */
+	__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_0);
+	__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_1);
+	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_0);
+	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_0);
+	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_1);
+	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_1);
+	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_0);
+	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
 
 	__raw_writel(SDP_SDRC_POWER_POP, SDRC_POWER);
 
@@ -879,28 +828,7 @@ void s_init(void)
  ********************************************************/
 int misc_init_r(void)
 {
-	int rev;
-
-	rev = beagle_revision();
-	switch (rev) {
-	case REVISION_AXBX:
-		printf("Beagle Rev Ax/Bx\n");
-		break;
-	case REVISION_CX:
-		printf("Beagle Rev C1/C2/C3\n");
-		break;
-	case REVISION_C4:
-		printf("Beagle Rev C4\n");
-		break;
-	case REVISION_XM:
-		printf("Beagle xM Rev A\n");
-		break;
-        case REVISION_XMC:
-		printf("Beagle xM Rev C\n");
-		break;
-	default:
-		printf("Beagle unknown 0x%02x\n", rev);
-	}
+	printf("Panther Rev A\n");
 
 	return 0;
 }
@@ -1242,6 +1170,8 @@ void blinkLEDs(void)
 {
 	void *p;
 
+// Pantherboard doesn't have any led to display the current state. Need to find an alternate way to do it.
+#if 0
 	/* Alternately turn the LEDs on and off */
 	p = (unsigned long *)OMAP34XX_GPIO5_BASE;
 	while (1) {
@@ -1259,6 +1189,8 @@ void blinkLEDs(void)
 		/* delay for a while */
 		delay(1000);
 	}
+#endif
+
 }
 
 typedef int (mmc_boot_addr) (void);
