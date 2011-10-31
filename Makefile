@@ -164,6 +164,9 @@ overo_config :	unconfig
 omap3beagle_config :    unconfig
 	@./mkconfig $(@:_config=) arm omap3 omap3beagle
 
+panther_config :    unconfig
+	@./mkconfig $(@:_config=) arm omap3 panther
+
 am3517crane_config :       unconfig
 	@./mkconfig $(@:_config=) arm omap3 am3517crane
 

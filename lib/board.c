@@ -75,9 +75,9 @@ void start_armboot (void)
 	buf =  (uchar*) CFG_LOADADDR;
 
 	/* Always first try mmc without checking boot pins */
-#ifndef CONFIG_OMAP3_BEAGLE
+#if !defined(CONFIG_OMAP3_BEAGLE) && !defined(CONFIG_PANTHER)
 	if ((get_mem_type() == MMC_ONENAND) || (get_mem_type() == MMC_NAND))
-#endif	/* CONFIG_OMAP3_BEAGLE */
+#endif	/* CONFIG_OMAP3_BEAGLE && CONFIG_PANTHER */
 		buf += mmc_boot(buf);
 
 	if (buf == (uchar *)CFG_LOADADDR) {
