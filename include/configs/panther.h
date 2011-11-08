@@ -95,7 +95,7 @@
 /*
  * select serial console configuration
  */
-#define CONFIG_SERIAL1		3	/* use UART3 */
+#define CONFIG_SERIAL3		3	/* use UART3 */
 #define CONFIG_CONS_INDEX	3
 
 #define CONFIG_BAUDRATE		115200
@@ -124,22 +124,32 @@
 #define CFG_NAND
 #define CFG_NAND_K9F1G08R0A
 #define NAND_16BIT
+#define ECC_HW_ENABLE
 
 /* NAND is partitioned:
  * 0x00000000 - 0x0007FFFF  Booting Image
- * 0x00080000 - 0x000BFFFF  U-Boot Image
- * 0x000C0000 - 0x000FFFFF  U-Boot Env Data (X-loader doesn't care)
- * 0x00100000 - 0x002FFFFF  Kernel Image
- * 0x00300000 - 0x08000000  depends on application
+ * 0x00080000 - 0x0023FFFF  U-Boot Image
+ * 0x00240000 - 0x0027FFFF  U-Boot Env Data (X-loader doesn't care)
+ * 0x00280000 - 0x0077FFFF  Kernel Image
+ * 0x00780000 - 0x08000000  depends on application
  */
 #define NAND_UBOOT_START	0x0080000 /* Leaving first 4 blocks for x-load */
-#define NAND_UBOOT_END		0x0160000 /* Giving a space of 2 blocks = 256KB */
+#define NAND_UBOOT_END		0x0240000 /* Giving a space of 2 blocks = 256KB */
 #define NAND_BLOCK_SIZE		0x20000
   
 #define GPMC_CONFIG 		(OMAP34XX_GPMC_BASE+0x50)
 #define GPMC_NAND_COMMAND_0	(OMAP34XX_GPMC_BASE+0x7C)
 #define GPMC_NAND_ADDRESS_0	(OMAP34XX_GPMC_BASE+0x80)
 #define GPMC_NAND_DATA_0	(OMAP34XX_GPMC_BASE+0x84)
+#ifdef ECC_HW_ENABLE
+/* ECC values brought over from u-boot to support hw ecc read */
+#define ECCCLEAR        (0x1 << 8)
+#define ECCRESULTREG1   (0x1 << 0)
+#define ECCSIZE512BYTE  0xFF
+#define ECCSIZE1        (ECCSIZE512BYTE << 22)
+#define ECCSIZE0        (ECCSIZE512BYTE << 12)
+#define ECCSIZE0SEL     (0x000 << 0)
+#endif
 
 #ifdef NAND_16BIT
 #define WRITE_NAND_COMMAND(d, adr) \
@@ -186,17 +196,17 @@
 #define CFG_SYNC_BURST_READ	1
 
 /* OneNAND is partitioned:
- *   0x0000000 - 0x0080000  X-Loader 
- *   0x0080000 - 0x00c0000   U-boot Image
- *   0x00c0000 - 0x00e0000   U-Boot Env Data (X-loader doesn't care)
- *   0x00e0000 - 0x0120000   Kernel Image
- *   0x0120000 - 0x4000000   depends on application
+ *   0x0000000 - 0x0080000  X-Loader
+ *   0x0080000 - 0x0240000   U-boot Image
+ *   0x0240000 - 0x0280000   U-Boot Env Data (X-loader doesn't care)
+ *   0x0280000 - 0x0780000   Kernel Image
+ *   0x0780000 - 0x8000000   depends on application
  */
 
-#define ONENAND_START_BLOCK 	4
-#define ONENAND_END_BLOCK	6
-#define ONENAND_PAGE_SIZE	2048     /* 2KB */
-#define ONENAND_BLOCK_SIZE	0x20000  /* 128KB */
+#define ONENAND_START_BLOCK      4
+#define ONENAND_END_BLOCK        18
+#define ONENAND_PAGE_SIZE        2048     /* 2KB */
+#define ONENAND_BLOCK_SIZE       0x20000  /* 128KB */
 
 #endif /* __CONFIG_H */
 
