@@ -271,6 +271,37 @@ u32 wait_on_value(u32 read_bit_mask, u32 match_value, u32 read_addr, u32 bound)
 }
 
 #ifdef CFG_3430SDRAM_DDR
+/**************************************************************************
+ * make_cs1_contiguous() - for es2 and above remap cs1 behind cs0 to allow
+ *  command line mem=xyz use all memory with out discontinuous support
+ *  compiled in.  Could do it at the ATAG, but there really is two banks...
+ * Called as part of 2nd phase DDR init.
+ **************************************************************************/
+void make_cs1_contiguous(void)
+{
+	u32 size, a_add_low, a_add_high;
+
+	size = get_sdr_cs_size(SDRC_CS0_OSET);
+	size /= SZ_32M;         /* find size to offset CS1 */
+	a_add_high = (size & 3) << 8;   /* set up low field */
+	a_add_low = (size & 0x3C) >> 2; /* set up high field */
+	__raw_writel((a_add_high | a_add_low), SDRC_CS_CFG);
+}
+
+/***********************************************************************
+ * get_cs0_size() - get size of chip select 0/1
+ ************************************************************************/
+u32 get_sdr_cs_size(u32 offset)
+{
+	u32 size;
+
+	/* get ram size field */
+	size = __raw_readl(SDRC_MCFG_0 + offset) >> 8;
+	size &= 0x3FF;          /* remove unwanted bits */
+	size *= SZ_2M;          /* find size in MB */
+	return size;
+}
+
 /*********************************************************************
  * config_3430sdram_ddr() - Init DDR on 3430SDP dev board.
  *********************************************************************/
@@ -284,41 +315,43 @@ void config_3430sdram_ddr(void)
 	/* setup sdrc to ball mux */
 	__raw_writel(SDP_SDRC_SHARING, SDRC_SHARING);
 
-	__raw_writel(0x2, SDRC_CS_CFG); /* 256MB/bank */
+	/* set mdcfg */
 	__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_0);
-	__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_1);
+
+	/* set timing */
 	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_0);
 	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_0);
-	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_1);
-	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_1);
 	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_0);
-	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
 
 	__raw_writel(SDP_SDRC_POWER_POP, SDRC_POWER);
 
 	/* init sequence for mDDR/mSDR using manual commands (DDR is different) */
 	__raw_writel(CMD_NOP, SDRC_MANUAL_0);
-	__raw_writel(CMD_NOP, SDRC_MANUAL_1);
-
-	delay(5000);
-
+	delay(2000);
 	__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_0);
-	__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_1);
-
 	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
-	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
-
 	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
-	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
 
 	/* set mr0 */
 	__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_0);
-	__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_1);
 
 	/* set up dll */
 	__raw_writel(SDP_SDRC_DLLAB_CTRL, SDRC_DLLA_CTRL);
-	delay(0x2000);	/* give time to lock */
+	delay(2000);	/* give time to lock */
 
+	make_cs1_contiguous();
+
+	__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_1);
+	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_1);
+	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_1);
+	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
+	/* init sequence for mDDR/mSDR using manual commands */
+	__raw_writel(CMD_NOP, SDRC_MANUAL_1);
+	delay(2000);	/* supposed to be 100us per design spec for mddr/msdr */
+	__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_1);
+	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
+	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
+	__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_1);
 }
 #endif /* CFG_3430SDRAM_DDR */
 
@@ -1163,36 +1196,6 @@ int nand_init(void)
 	return 0;
 }
 
-#define DEBUG_LED1			149	/* gpio */
-#define DEBUG_LED2			150	/* gpio */
-
-void blinkLEDs(void)
-{
-	void *p;
-
-// Pantherboard doesn't have any led to display the current state. Need to find an alternate way to do it.
-#if 0
-	/* Alternately turn the LEDs on and off */
-	p = (unsigned long *)OMAP34XX_GPIO5_BASE;
-	while (1) {
-		/* turn LED1 on and LED2 off */
-		*(unsigned long *)(p + 0x94) = 1 << (DEBUG_LED1 % 32);
-		*(unsigned long *)(p + 0x90) = 1 << (DEBUG_LED2 % 32);
-
-		/* delay for a while */
-		delay(1000);
-
-		/* turn LED1 off and LED2 on */
-		*(unsigned long *)(p + 0x90) = 1 << (DEBUG_LED1 % 32);
-		*(unsigned long *)(p + 0x94) = 1 << (DEBUG_LED2 % 32);
-
-		/* delay for a while */
-		delay(1000);
-	}
-#endif
-
-}
-
 #ifdef ECC_HW_ENABLE
 void omap_enable_hw_ecc(void)
 {
@@ -1340,6 +1343,36 @@ int mmc_boot(unsigned char *buf)
 	printf("Starting OS Bootloader from MMC...\n");
 #endif
 	return size;
+}
+
+#define DEBUG_LED1			149	/* gpio */
+#define DEBUG_LED2			150	/* gpio */
+
+void blinkLEDs(void)
+{
+	void *p;
+
+// Pantherboard doesn't have any led to display the current state. Need to find an alternate way to do it.
+#if 0
+	/* Alternately turn the LEDs on and off */
+	p = (unsigned long *)OMAP34XX_GPIO5_BASE;
+	while (1) {
+		/* turn LED1 on and LED2 off */
+		*(unsigned long *)(p + 0x94) = 1 << (DEBUG_LED1 % 32);
+		*(unsigned long *)(p + 0x90) = 1 << (DEBUG_LED2 % 32);
+
+		/* delay for a while */
+		delay(1000);
+
+		/* turn LED1 off and LED2 on */
+		*(unsigned long *)(p + 0x90) = 1 << (DEBUG_LED1 % 32);
+		*(unsigned long *)(p + 0x94) = 1 << (DEBUG_LED2 % 32);
+
+		/* delay for a while */
+		delay(1000);
+	}
+#endif
+
 }
 
 /* optionally do something like blinking LED */

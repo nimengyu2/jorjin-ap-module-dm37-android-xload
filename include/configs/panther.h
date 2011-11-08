@@ -40,8 +40,6 @@
 #define CONFIG_OMAP3430		1	/* which is in a 3430 */
 #define CONFIG_PANTHER	1	/* working with PANTHER */
 
-#define CONFIG_BEAGLE_REV2	 1
-
 /* Enable the below macro if MMC boot support is required */
 #define CONFIG_MMC	1
 #if defined(CONFIG_MMC)
