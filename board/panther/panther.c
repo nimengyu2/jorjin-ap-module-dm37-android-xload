@@ -271,6 +271,37 @@ u32 wait_on_value(u32 read_bit_mask, u32 match_value, u32 read_addr, u32 bound)
 }
 
 #ifdef CFG_3430SDRAM_DDR
+/**************************************************************************
+ * make_cs1_contiguous() - for es2 and above remap cs1 behind cs0 to allow
+ *  command line mem=xyz use all memory with out discontinuous support
+ *  compiled in.  Could do it at the ATAG, but there really is two banks...
+ * Called as part of 2nd phase DDR init.
+ **************************************************************************/
+void make_cs1_contiguous(void)
+{
+	u32 size, a_add_low, a_add_high;
+
+	size = get_sdr_cs_size(SDRC_CS0_OSET);
+	size /= SZ_32M;         /* find size to offset CS1 */
+	a_add_high = (size & 3) << 8;   /* set up low field */
+	a_add_low = (size & 0x3C) >> 2; /* set up high field */
+	__raw_writel((a_add_high | a_add_low), SDRC_CS_CFG);
+}
+
+/***********************************************************************
+ * get_cs0_size() - get size of chip select 0/1
+ ************************************************************************/
+u32 get_sdr_cs_size(u32 offset)
+{
+	u32 size;
+
+	/* get ram size field */
+	size = __raw_readl(SDRC_MCFG_0 + offset) >> 8;
+	size &= 0x3FF;          /* remove unwanted bits */
+	size *= SZ_2M;          /* find size in MB */
+	return size;
+}
+
 /*********************************************************************
  * config_3430sdram_ddr() - Init DDR on 3430SDP dev board.
  *********************************************************************/
@@ -284,41 +315,43 @@ void config_3430sdram_ddr(void)
 	/* setup sdrc to ball mux */
 	__raw_writel(SDP_SDRC_SHARING, SDRC_SHARING);
 
-	__raw_writel(0x2, SDRC_CS_CFG); /* 256MB/bank */
+	/* set mdcfg */
 	__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_0);
-	__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_1);
+
+	/* set timing */
 	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_0);
 	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_0);
-	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_1);
-	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_1);
 	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_0);
-	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
 
 	__raw_writel(SDP_SDRC_POWER_POP, SDRC_POWER);
 
 	/* init sequence for mDDR/mSDR using manual commands (DDR is different) */
 	__raw_writel(CMD_NOP, SDRC_MANUAL_0);
-	__raw_writel(CMD_NOP, SDRC_MANUAL_1);
-
-	delay(5000);
-
+	delay(2000);
 	__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_0);
-	__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_1);
-
 	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
-	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
-
 	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_0);
-	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
 
 	/* set mr0 */
 	__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_0);
-	__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_1);
 
 	/* set up dll */
 	__raw_writel(SDP_SDRC_DLLAB_CTRL, SDRC_DLLA_CTRL);
-	delay(0x2000);	/* give time to lock */
+	delay(2000);	/* give time to lock */
 
+	make_cs1_contiguous();
+
+	__raw_writel(SDP_SDRC_MDCFG_0_DDR_XM, SDRC_MCFG_1);
+	__raw_writel(MICRON_V_ACTIMA_200, SDRC_ACTIM_CTRLA_1);
+	__raw_writel(MICRON_V_ACTIMB_200, SDRC_ACTIM_CTRLB_1);
+	__raw_writel(SDP_3430_SDRC_RFR_CTRL_200MHz, SDRC_RFR_CTRL_1);
+	/* init sequence for mDDR/mSDR using manual commands */
+	__raw_writel(CMD_NOP, SDRC_MANUAL_1);
+	delay(2000);	/* supposed to be 100us per design spec for mddr/msdr */
+	__raw_writel(CMD_PRECHARGE, SDRC_MANUAL_1);
+	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
+	__raw_writel(CMD_AUTOREFRESH, SDRC_MANUAL_1);
+	__raw_writel(SDP_SDRC_MR_0_DDR, SDRC_MR_1);
 }
 #endif /* CFG_3430SDRAM_DDR */
 
@@ -1163,36 +1196,125 @@ int nand_init(void)
 	return 0;
 }
 
-#define DEBUG_LED1			149	/* gpio */
-#define DEBUG_LED2			150	/* gpio */
-
-void blinkLEDs(void)
+#ifdef ECC_HW_ENABLE
+void omap_enable_hw_ecc(void)
 {
-	void *p;
-
-// Pantherboard doesn't have any led to display the current state. Need to find an alternate way to do it.
-#if 0
-	/* Alternately turn the LEDs on and off */
-	p = (unsigned long *)OMAP34XX_GPIO5_BASE;
-	while (1) {
-		/* turn LED1 on and LED2 off */
-		*(unsigned long *)(p + 0x94) = 1 << (DEBUG_LED1 % 32);
-		*(unsigned long *)(p + 0x90) = 1 << (DEBUG_LED2 % 32);
-
-		/* delay for a while */
-		delay(1000);
-
-		/* turn LED1 off and LED2 on */
-		*(unsigned long *)(p + 0x90) = 1 << (DEBUG_LED1 % 32);
-		*(unsigned long *)(p + 0x94) = 1 << (DEBUG_LED2 % 32);
-
-		/* delay for a while */
-		delay(1000);
-	}
+	uint32_t val,dev_width = 0;
+        uint8_t cs = 0;
+#ifdef NAND_16BIT
+	dev_width = 1;
 #endif
+	/* Clear the ecc result registers, select ecc reg as 1 */
+	__raw_writel(ECCCLEAR | ECCRESULTREG1, GPMC_ECC_CONTROL + GPMC_CONFIG_CS0);
 
+	/*
+	* Size 0 = 0xFF, Size1 is 0xFF - both are 512 bytes
+	* tell all regs to generate size0 sized regs
+	* we just have a single ECC engine for all CS
+	*/
+	__raw_writel(ECCSIZE1 | ECCSIZE0 | ECCSIZE0SEL,
+			GPMC_ECC_SIZE_CONFIG + GPMC_CONFIG_CS0);
+	val = (dev_width << 7) | (cs << 1) | (0x1);
+	__raw_writel(val, GPMC_ECC_CONFIG + GPMC_CONFIG_CS0);
+	return;
+}
+/*
+ * hweightN: returns the hamming weight (i.e. the number
+ * of bits set) of a N-bit word
+ */
+
+static inline unsigned int hweight32(unsigned int w)
+{
+        unsigned int res = (w & 0x55555555) + ((w >> 1) & 0x55555555);
+        res = (res & 0x33333333) + ((res >> 2) & 0x33333333);
+        res = (res & 0x0F0F0F0F) + ((res >> 4) & 0x0F0F0F0F);
+        res = (res & 0x00FF00FF) + ((res >> 8) & 0x00FF00FF);
+        return (res & 0x0000FFFF) + ((res >> 16) & 0x0000FFFF);
+}
+/*
+ * gen_true_ecc - This function will generate true ECC value, which
+ * can be used when correcting data read from NAND flash memory core
+ *
+ * @ecc_buf:    buffer to store ecc code
+ *
+ * @return:     re-formatted ECC value
+ */
+static uint32_t gen_true_ecc(uint8_t *ecc_buf)
+{
+        return ecc_buf[0] | (ecc_buf[1] << 16) | ((ecc_buf[2] & 0xF0) << 20) |
+                ((ecc_buf[2] & 0x0F) << 8);
 }
 
+
+int omap_correct_data_hw_ecc(u_char *dat, u_char *read_ecc, u_char *calc_ecc)
+{
+        uint32_t orig_ecc, new_ecc, res, hm;
+        uint16_t parity_bits, byte;
+        uint8_t bit;
+
+        /* Regenerate the orginal ECC */
+        orig_ecc = gen_true_ecc(read_ecc);
+        new_ecc = gen_true_ecc(calc_ecc);
+        /* Get the XOR of real ecc */
+        res = orig_ecc ^ new_ecc;
+        if (res) {
+                /* Get the hamming width */
+                hm = hweight32(res);
+                /* Single bit errors can be corrected! */
+                if (hm == 12) {
+                        /* Correctable data! */
+                        parity_bits = res >> 16;
+                        bit = (parity_bits & 0x7);
+                        byte = (parity_bits >> 3) & 0x1FF;
+                        /* Flip the bit to correct */
+                        dat[byte] ^= (0x1 << bit);
+                } else if (hm == 1) {
+                        printf("Error: Ecc is wrong\n");
+                        /* ECC itself is corrupted */
+                        return 2;
+                } else {
+                        /*
+                         * hm distance != parity pairs OR one, could mean 2 bit
+                         * error OR potentially be on a blank page..
+                         * orig_ecc: contains spare area data from nand flash.
+                         * new_ecc: generated ecc while reading data area.
+                         * Note: if the ecc = 0, all data bits from which it was
+                         * generated are 0xFF.
+                         * The 3 byte(24 bits) ecc is generated per 512byte
+                         * chunk of a page. If orig_ecc(from spare area)
+                         * is 0xFF && new_ecc(computed now from data area)=0x0,
+                         * this means that data area is 0xFF and spare area is
+                         * 0xFF. A sure sign of a erased page!
+                         */
+                        if ((orig_ecc == 0x0FFF0FFF) && (new_ecc == 0x00000000))
+                                return 0;
+                        printf("Error: Bad compare! failed\n");
+                        /* detected 2 bit error */
+                        return -1;
+                }
+        }
+        return 0;
+}
+void omap_calculate_hw_ecc(const u_char *dat, u_char *ecc_code)
+{
+        u_int32_t val;
+
+        /* Start Reading from HW ECC1_Result = 0x200 */
+        val = __raw_readl(GPMC_ECC1_RESULT + GPMC_CONFIG_CS0);
+
+        ecc_code[0] = val & 0xFF;
+        ecc_code[1] = (val >> 16) & 0xFF;
+        ecc_code[2] = ((val >> 8) & 0x0F) | ((val >> 20) & 0xF0);
+
+        /*
+         * Stop reading anymore ECC vals and clear old results
+         * enable will be called if more reads are required
+         */
+	__raw_writel(0x000 , GPMC_ECC_CONFIG + GPMC_CONFIG_CS0);
+
+        return;
+}
+#endif
 typedef int (mmc_boot_addr) (void);
 int mmc_boot(unsigned char *buf)
 {
@@ -1221,6 +1343,36 @@ int mmc_boot(unsigned char *buf)
 	printf("Starting OS Bootloader from MMC...\n");
 #endif
 	return size;
+}
+
+#define DEBUG_LED1			149	/* gpio */
+#define DEBUG_LED2			150	/* gpio */
+
+void blinkLEDs(void)
+{
+	void *p;
+
+// Pantherboard doesn't have any led to display the current state. Need to find an alternate way to do it.
+#if 0
+	/* Alternately turn the LEDs on and off */
+	p = (unsigned long *)OMAP34XX_GPIO5_BASE;
+	while (1) {
+		/* turn LED1 on and LED2 off */
+		*(unsigned long *)(p + 0x94) = 1 << (DEBUG_LED1 % 32);
+		*(unsigned long *)(p + 0x90) = 1 << (DEBUG_LED2 % 32);
+
+		/* delay for a while */
+		delay(1000);
+
+		/* turn LED1 off and LED2 on */
+		*(unsigned long *)(p + 0x90) = 1 << (DEBUG_LED1 % 32);
+		*(unsigned long *)(p + 0x94) = 1 << (DEBUG_LED2 % 32);
+
+		/* delay for a while */
+		delay(1000);
+	}
+#endif
+
 }
 
 /* optionally do something like blinking LED */
