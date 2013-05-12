@@ -28,6 +28,9 @@
 /x-load.map
 /x-load.bin
 /x-load.bin.ift
+/x-loader_make.out
+/include/asm/arch
+/include/asm/proc
 
 #
 # git files that we don't want to ignore even it they are dot-files
