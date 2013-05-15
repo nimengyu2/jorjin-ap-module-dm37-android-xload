@@ -242,6 +242,11 @@
 #define CM_CLKSEL1_PLL      0x48004d40
 #define CM_CLKSEL2_PLL      0x48004d44
 #define CM_CLKSEL3_PLL      0x48004d48
+// yuge add 
+#define CM_CLKSEL4_PLL      0x48004D4C
+#define CM_CLKSEL5_PLL      0x48004D50
+
+
 #define CM_FCLKEN_DSS       0x48004e00
 #define CM_ICLKEN_DSS       0x48004e10
 #define CM_CLKSEL_DSS       0x48004e40

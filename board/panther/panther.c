@@ -84,6 +84,9 @@ extern block_dev_desc_t *mmc_get_dev(int dev);
 #define __raw_readw(a)		(*(volatile unsigned short *)(a))
 #define __raw_writew(v, a)	(*(volatile unsigned short *)(a) = (v))
 
+
+unsigned int g_dpll3_ddr_clk = 0;
+
 /*******************************************************
  * Routine: delay
  * Description: spinning delay to use before udelay works
@@ -455,6 +458,9 @@ static void dpll3_init_34xx(u32 sil_index, u32 clk_index)
 	/* M (CORE_DPLL_MULT): CM_CLKSEL1_PLL[16:26] */
 	sr32(CM_CLKSEL1_PLL, 16, 11, ptr->m);
 
+	g_dpll3_ddr_clk = ptr->m;
+	
+
 	/* N (CORE_DPLL_DIV): CM_CLKSEL1_PLL[8:14] */
 	sr32(CM_CLKSEL1_PLL, 8, 7, ptr->n);
 
@@ -595,6 +601,9 @@ static void dpll3_init_36xx(u32 sil_index, u32 clk_index)
 	/* M (CORE_DPLL_MULT): CM_CLKSEL1_PLL[16:26] */
 	sr32(CM_CLKSEL1_PLL, 16, 11, ptr->m);
 
+	g_dpll3_ddr_clk = ptr->m;
+	
+
 	/* N (CORE_DPLL_DIV): CM_CLKSEL1_PLL[8:14] */
 	sr32(CM_CLKSEL1_PLL, 8, 7, ptr->n);
 
@@ -711,6 +720,69 @@ static void iva_init_36xx(u32 sil_index, u32 clk_index)
 	sr32(CM_CLKEN_PLL_IVA2, 0, 3, PLL_LOCK);
 
 	wait_on_value(BIT0, 1, CM_IDLEST_PLL_IVA2, LDELAY);
+}
+
+
+// fn_get_dpll3_m_34xx()
+unsigned int fn_get_dpll3_m_34xx(void)
+{
+	u32 osc_clk=0, sys_clkin_sel;
+	u32 clk_index, sil_index;
+	dpll_param *ptr;
+
+	/* Gauge the input clock speed and find out the sys_clkin_sel
+	 * value corresponding to the input clock.
+	 */
+	osc_clk = get_osc_clk_speed();
+	get_sys_clkin_sel(osc_clk, &sys_clkin_sel);
+
+	if((is_cpu_family() != CPU_OMAP36XX) && (sys_clkin_sel > 2)) {
+		//sr32(PRM_CLKSRC_CTRL, 6, 2, 2);/* input clock divider */
+		clk_index = sys_clkin_sel/2;
+	} else {
+		//sr32(PRM_CLKSRC_CTRL, 6, 2, 1);/* input clock divider */
+		clk_index = sys_clkin_sel;
+	}
+	sil_index = get_cpu_rev() - 1;
+
+	
+	/* Getting the base address of Core DPLL param table*/
+	ptr = (dpll_param *)get_core_dpll_param();
+
+	/* Moving it to the right sysclk and ES rev base */
+	ptr = ptr + 2*clk_index + sil_index;
+	
+	return ptr->m;
+}
+
+unsigned int fn_get_dpll3_m_36xx(void)
+{
+	u32 osc_clk=0, sys_clkin_sel;
+	u32 clk_index, sil_index;
+	dpll_param *ptr;
+
+	/* Gauge the input clock speed and find out the sys_clkin_sel
+	 * value corresponding to the input clock.
+	 */
+	osc_clk = get_osc_clk_speed();
+	get_sys_clkin_sel(osc_clk, &sys_clkin_sel);
+
+	if((is_cpu_family() != CPU_OMAP36XX) && (sys_clkin_sel > 2)) {
+		//sr32(PRM_CLKSRC_CTRL, 6, 2, 2);/* input clock divider */
+		clk_index = sys_clkin_sel/2;
+	} else {
+		//sr32(PRM_CLKSRC_CTRL, 6, 2, 1);/* input clock divider */
+		clk_index = sys_clkin_sel;
+	}
+	sil_index = get_cpu_rev() - 1;
+
+	/* Getting the base address of Core DPLL param table*/
+	ptr = (dpll_param *)get_36x_core_dpll_param();
+
+	/* Moving it to the right sysclk and ES rev base */
+	ptr += clk_index;
+	
+	return ptr->m;
 }
 
 /******************************************************************************
@@ -853,6 +925,8 @@ void s_init(void)
 	per_clocks_enable();
 	prcm_init();
 	config_3430sdram_ddr();
+
+	
 }
 
 /*******************************************************
@@ -861,8 +935,20 @@ void s_init(void)
  ********************************************************/
 int misc_init_r(void)
 {
-	printf("Panther Rev A\n");
+	unsigned int clksel4_pll;
+	unsigned int clksel5_pll;	
+	clksel4_pll = __raw_readl(CM_CLKSEL4_PLL);
+	clksel5_pll = __raw_readl(CM_CLKSEL5_PLL);
 
+	printf("LSDBOARD Rev A\n");
+	printf("clksel4_pll=0x%08x,clksel5_pll=0x%08x\n",clksel4_pll,clksel5_pll);
+
+	g_dpll3_ddr_clk = fn_get_dpll3_m_34xx();
+	printf("dpll3_m_34xx_init,DDRclk=%d\n",g_dpll3_ddr_clk);
+
+	g_dpll3_ddr_clk = fn_get_dpll3_m_36xx();
+	printf("dpll3_m_36xx_init,DDRclk=%d\n",g_dpll3_ddr_clk);
+	
 	return 0;
 }
 

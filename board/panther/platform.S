@@ -375,11 +375,21 @@ iva_36x_dpll_param:
 .word 10, 0, 0, 1
 .word 10, 0, 0, 1
 
+// source data
+/*
 core_36x_dpll_param:
 .word 200, 12, 0, 1
 .word 200, 12, 0, 1
 .word 200, 12, 0, 1
 .word 200, 12, 0, 1
+*/
+
+// clk 332mhz
+core_36x_dpll_param:
+.word 166, 12, 0, 1
+.word 166, 12, 0, 1
+.word 166, 12, 0, 1
+.word 166, 12, 0, 1
 
 per_36x_dpll_param:
 /*    SYSCLK     M      N      M2      M3      M4     M5      M6      m2DIV */
