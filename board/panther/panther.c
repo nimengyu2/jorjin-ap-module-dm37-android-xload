@@ -937,14 +937,14 @@ int misc_init_r(void)
 {
 	unsigned int clksel4_pll;
 	unsigned int clksel5_pll;	
+
+	sr32(CM_CLKSEL5_PLL, 0, 5, 8);
+
 	clksel4_pll = __raw_readl(CM_CLKSEL4_PLL);
 	clksel5_pll = __raw_readl(CM_CLKSEL5_PLL);
 
 	printf("LSDBOARD Rev A\n");
 	printf("clksel4_pll=0x%08x,clksel5_pll=0x%08x\n",clksel4_pll,clksel5_pll);
-
-	g_dpll3_ddr_clk = fn_get_dpll3_m_34xx();
-	printf("dpll3_m_34xx_init,DDRclk=%d\n",g_dpll3_ddr_clk);
 
 	g_dpll3_ddr_clk = fn_get_dpll3_m_36xx();
 	printf("dpll3_m_36xx_init,DDRclk=%d\n",g_dpll3_ddr_clk);
